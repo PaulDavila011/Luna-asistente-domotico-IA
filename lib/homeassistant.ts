@@ -25,3 +25,31 @@ export async function callService(domain: string, service: string, data: Record<
 
 // Entidad del media_player de Spotify configurada en Home Assistant.
 export const SPOTIFY_ENTITY = process.env.HA_SPOTIFY_ENTITY || "media_player.spotify";
+
+export type HAEntity = { entity_id: string; friendly_name: string };
+
+type HAState = { entity_id: string; attributes?: { friendly_name?: string } };
+
+async function getAllStates(): Promise<HAState[]> {
+  const res = await fetch(`${HA_URL}/api/states`, { headers: headers(), cache: "no-store" });
+  if (!res.ok) return [];
+  return res.json();
+}
+
+function toHAEntity(state: HAState): HAEntity {
+  return { entity_id: state.entity_id, friendly_name: state.attributes?.friendly_name || state.entity_id };
+}
+
+// Luces y enchufes reales disponibles, con su friendly_name actual.
+export async function getControllableEntities(): Promise<HAEntity[]> {
+  const states = await getAllStates();
+  return states
+    .filter((s) => s.entity_id.startsWith("light.") || s.entity_id.startsWith("switch."))
+    .map(toHAEntity);
+}
+
+// Escenas disponibles, con su friendly_name actual.
+export async function getScenes(): Promise<HAEntity[]> {
+  const states = await getAllStates();
+  return states.filter((s) => s.entity_id.startsWith("scene.")).map(toHAEntity);
+}
