@@ -116,10 +116,30 @@ export const tools = [
         properties: {
           action: {
             type: "string",
-            enum: ["play", "pause", "next", "previous"],
+            enum: ["play", "pause", "next", "previous", "volume_up", "volume_down"],
           },
         },
         required: ["action"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "play_music",
+      description:
+        "Busca y reproduce algo específico en Spotify (a través de Home Assistant), a diferencia de control_music que solo hace play/pause/next/previous/volumen sin especificar qué reproducir. Usa 'track' para una canción específica (ej. 'pon Bohemian Rhapsody'), 'artist' para poner lo más popular de un artista (ej. 'pon Bad Bunny'), 'playlist' para una playlist por nombre (ej. 'pon mi playlist de rock', 'pon Discover Weekly'), o 'album' para un álbum específico (ej. 'pon el álbum Dark Side of the Moon').",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Lo que el usuario quiere escuchar, ej. 'Bad Bunny', 'Bohemian Rhapsody', 'Discover Weekly' o 'Dark Side of the Moon'" },
+          type: {
+            type: "string",
+            enum: ["track", "artist", "playlist", "album"],
+            description: "Tipo de contenido: canción, artista, playlist o álbum",
+          },
+        },
+        required: ["query", "type"],
       },
     },
   },
@@ -139,8 +159,8 @@ export async function askDeepSeek(
 ) {
   let systemPrompt =
     lang === "es"
-      ? "Eres Luna, un asistente de voz para el hogar. Responde breve y natural, en español, en texto plano, si emojis, sin negritas, sin markdown ni formato especial porque tu respuesta se va a leer e voz alta. Si el usuario pide algo domótico o web, usa las herramientas disponibles."
-      : "You are Luna, a home voice assistant. Reply briefly and naturally, in English, in plain text with no emojis, no bold, no markdown or special formatting, since your response will be read aloud.. Use the available tools for smart-home or web requests.";
+      ? "Eres Luna, un asistente de voz para el hogar. Responde breve y natural, en español, en texto plano, si emojis, sin negritas, sin markdown ni formato especial porque tu respuesta se va a leer e voz alta. Si el usuario pide algo domótico o web, usa las herramientas disponibles. Puedes subir o bajar el volumen de la música con control_music (volume_up, volume_down), y puedes reproducir una canción, artista, playlist o álbum específico por nombre con play_music; la música sigue automáticamente con contenido similar después de que termina lo que se pidió, en vez de detenerse."
+      : "You are Luna, a home voice assistant. Reply briefly and naturally, in English, in plain text with no emojis, no bold, no markdown or special formatting, since your response will be read aloud.. Use the available tools for smart-home or web requests. You can raise or lower the music volume with control_music (volume_up, volume_down), and you can play a specific song, artist, playlist or album by name with play_music; the music automatically continues with similar content afterward instead of stopping.";
 
   if (entities.length) {
     systemPrompt +=
@@ -161,6 +181,14 @@ export async function askDeepSeek(
     lang === "es"
       ? `\n\nColores favoritos disponibles para set_favorite_light_color: ${favoriteNames}.`
       : `\n\nAvailable favorite colors for set_favorite_light_color: ${favoriteNames}.`;
+
+  const now = new Intl.DateTimeFormat(lang === "es" ? "es-EC" : "en-US", {
+    timeZone: "America/Guayaquil",
+    dateStyle: "full",
+    timeStyle: "short",
+  }).format(new Date());
+  systemPrompt +=
+    lang === "es" ? `\n\nFecha y hora actual: ${now}.` : `\n\nCurrent date and time: ${now}.`;
 
   const res = await fetch(DEEPSEEK_URL, {
     method: "POST",

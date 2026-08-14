@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { askDeepSeek } from "@/lib/deepseek";
-import { callService, getControllableEntities, getScenes, SPOTIFY_ENTITY } from "@/lib/homeassistant";
+import { callService, getState, getControllableEntities, getScenes, SPOTIFY_ENTITY } from "@/lib/homeassistant";
 import { FAVORITE_COLORS } from "@/lib/colors";
+import { searchSpotify } from "@/lib/spotify";
 
 const MUSIC_SERVICE: Record<string, string> = {
   play: "media_play",
@@ -78,11 +79,48 @@ export async function POST(req: Request) {
       }
 
       if (call.function.name === "control_music") {
-        const service = MUSIC_SERVICE[args.action];
-        if (service) {
-          await callService("media_player", service, { entity_id: SPOTIFY_ENTITY });
+        if (args.action === "volume_up" || args.action === "volume_down") {
+          const state = await getState(SPOTIFY_ENTITY);
+          const currentVolume = state?.attributes?.volume_level ?? 0.5;
+          const delta = args.action === "volume_up" ? 0.1 : -0.1;
+          const newVolume = Math.max(0, Math.min(1, currentVolume + delta));
+          await callService("media_player", "volume_set", { entity_id: SPOTIFY_ENTITY, volume_level: newVolume });
+        } else {
+          const service = MUSIC_SERVICE[args.action];
+          if (service) {
+            await callService("media_player", service, { entity_id: SPOTIFY_ENTITY });
+          }
         }
         if (!reply) reply = lang === "es" ? "Listo." : "Done.";
+      }
+
+      if (call.function.name === "play_music") {
+        const result = await searchSpotify(args.query, args.type);
+        if (!result) {
+          if (!reply) {
+            const labelEs: Record<string, string> = { track: "esa canción", artist: "ese artista", playlist: "esa playlist", album: "ese álbum" };
+            const labelEn: Record<string, string> = { track: "song", artist: "artist", playlist: "playlist", album: "album" };
+            reply =
+              lang === "es"
+                ? `No encontré ${labelEs[args.type] ?? "eso"}.`
+                : `I couldn't find that ${labelEn[args.type] ?? "content"}.`;
+          }
+        } else {
+          const played = await callService("media_player", "play_media", {
+            entity_id: SPOTIFY_ENTITY,
+            media_content_id: result.uri,
+            media_content_type: args.type,
+          });
+          if (!reply) {
+            reply = played
+              ? lang === "es"
+                ? `Poniendo ${result.name}.`
+                : `Playing ${result.name}.`
+              : lang === "es"
+              ? "No pude reproducir eso."
+              : "I couldn't play that.";
+          }
+        }
       }
     }
 
